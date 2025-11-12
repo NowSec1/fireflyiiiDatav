@@ -1,0 +1,223 @@
+from __future__ import annotations
+
+from collections import defaultdict
+from dataclasses import dataclass
+from datetime import date, datetime
+from decimal import Decimal
+from pathlib import Path
+from typing import Dict, Iterable, List, Tuple
+
+import requests
+import yaml
+from dateutil import parser
+from dateutil.relativedelta import relativedelta
+from flask import Flask, render_template
+
+
+@dataclass
+class AppConfig:
+    api_base_url: str
+    api_token: str
+    months: int = 12
+
+
+class ConfigError(RuntimeError):
+    """Raised when the configuration file is missing or invalid."""
+
+
+def load_config() -> AppConfig:
+    config_path = Path("config.yaml")
+    if not config_path.exists():
+        raise ConfigError(
+            "Missing config.yaml. Copy config.example.yaml, rename it to config.yaml, and set api_base_url/api_token."
+        )
+
+    with config_path.open("r", encoding="utf-8") as fh:
+        raw = yaml.safe_load(fh) or {}
+
+    try:
+        api_base_url = raw["api_base_url"].rstrip("/")
+        api_token = raw["api_token"]
+    except KeyError as exc:  # pragma: no cover - defensive guard
+        raise ConfigError(f"Configuration is missing required key: {exc.args[0]}") from exc
+
+    months = int(raw.get("months", 12))
+    if months <= 0:
+        raise ConfigError("`months` must be a positive integer")
+
+    return AppConfig(api_base_url=api_base_url, api_token=api_token, months=months)
+
+
+class FireflyClient:
+    def __init__(self, config: AppConfig) -> None:
+        self.base_url = config.api_base_url
+        self.headers = {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {config.api_token}",
+        }
+
+    def fetch_transactions(
+        self,
+        transaction_type: str,
+        start_date: date,
+        end_date: date,
+        page_size: int = 100,
+    ) -> List[Dict[str, object]]:
+        """Retrieve transactions of the given type between start_date and end_date."""
+
+        endpoint = f"{self.base_url}/api/v1/transactions"
+        page = 1
+        transactions: List[Dict[str, object]] = []
+
+        while True:
+            params = {
+                "type": transaction_type,
+                "start": start_date.isoformat(),
+                "end": end_date.isoformat(),
+                "limit": page_size,
+                "page": page,
+            }
+            response = requests.get(endpoint, headers=self.headers, params=params, timeout=30)
+            response.raise_for_status()
+            payload = response.json()
+
+            data = payload.get("data", [])
+            for group in data:
+                transactions.extend(self._parse_group(group, transaction_type))
+
+            pagination = payload.get("meta", {}).get("pagination", {})
+            if page >= pagination.get("total_pages", page):
+                break
+            page += 1
+
+        return transactions
+
+    @staticmethod
+    def _parse_group(group: Dict[str, object], transaction_type: str) -> Iterable[Dict[str, object]]:
+        attributes = group.get("attributes", {})
+        for transaction in attributes.get("transactions", []):
+            amount = Decimal(str(transaction.get("amount", "0")))
+            amount = abs(amount)
+
+            booked_at = parser.isoparse(transaction.get("date"))
+            category = transaction.get("category_name") or "未分类"
+            source = transaction.get("source_name") or "未知账户"
+            destination = transaction.get("destination_name") or "未知账户"
+
+            yield {
+                "id": transaction.get("transaction_journal_id"),
+                "type": transaction_type,
+                "booked_at": booked_at,
+                "amount": amount,
+                "currency": transaction.get("currency_code") or transaction.get("foreign_currency_code") or "",
+                "category": category,
+                "source": source,
+                "destination": destination,
+                "description": attributes.get("description", ""),
+            }
+
+
+def month_start(value: date) -> date:
+    return value.replace(day=1)
+
+
+def month_range(start: date, months: int) -> List[date]:
+    return [month_start(start) + relativedelta(months=i) for i in range(months)]
+
+
+def aggregate_monthly(transactions: Dict[str, List[Dict[str, object]]], months: List[date]) -> Dict[str, List[float]]:
+    buckets: Dict[str, Dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
+
+    for tx_type, items in transactions.items():
+        for tx in items:
+            booked_at: datetime = tx["booked_at"]
+            key = month_start(booked_at.date()).strftime("%Y-%m")
+            buckets[key][tx_type] += tx["amount"]
+
+    labels: List[str] = []
+    series = {"withdrawal": [], "deposit": [], "transfer": []}
+
+    for month in months:
+        key = month.strftime("%Y-%m")
+        labels.append(key)
+        for tx_type in series.keys():
+            series[tx_type].append(float(buckets[key].get(tx_type, Decimal("0"))))
+
+    series["labels"] = labels
+    return series
+
+
+def aggregate_totals(transactions: Dict[str, List[Dict[str, object]]]) -> Dict[str, float]:
+    totals = {}
+    for tx_type, items in transactions.items():
+        totals[tx_type] = float(sum((tx["amount"] for tx in items), Decimal("0")))
+    totals["net"] = totals.get("deposit", 0.0) - totals.get("withdrawal", 0.0)
+    return totals
+
+
+def top_breakdown(items: List[Dict[str, object]], key: str, limit: int = 5) -> List[Tuple[str, float]]:
+    totals: Dict[str, Decimal] = defaultdict(Decimal)
+    for tx in items:
+        label = tx.get(key) or "未分类"
+        totals[label] += tx["amount"]
+    return [
+        (name, float(amount))
+        for name, amount in sorted(totals.items(), key=lambda pair: pair[1], reverse=True)[:limit]
+    ]
+
+
+def prepare_context(config: AppConfig) -> Dict[str, object]:
+    today = date.today()
+    start_month = month_start(today) - relativedelta(months=config.months - 1)
+    months = month_range(start_month, config.months)
+    start_date = months[0]
+    end_date = today
+
+    client = FireflyClient(config)
+    transactions: Dict[str, List[Dict[str, object]]] = {}
+
+    for tx_type in ("withdrawal", "deposit", "transfer"):
+        transactions[tx_type] = client.fetch_transactions(tx_type, start_date, end_date)
+
+    monthly_series = aggregate_monthly(transactions, months)
+    totals = aggregate_totals(transactions)
+
+    context = {
+        "monthly_labels": monthly_series["labels"],
+        "monthly_withdrawals": monthly_series["withdrawal"],
+        "monthly_deposits": monthly_series["deposit"],
+        "monthly_transfers": monthly_series["transfer"],
+        "totals": totals,
+        "top_spending_categories": top_breakdown(transactions["withdrawal"], "category"),
+        "top_income_categories": top_breakdown(transactions["deposit"], "category"),
+        "top_source_accounts": top_breakdown(transactions["withdrawal"], "source"),
+        "top_destination_accounts": top_breakdown(transactions["deposit"], "destination"),
+        "top_transfer_accounts": top_breakdown(transactions["transfer"], "destination"),
+        "last_updated": datetime.utcnow(),
+    }
+    return context
+
+
+app = Flask(__name__)
+
+
+@app.route("/")
+def index():
+    config = load_config()
+    context = prepare_context(config)
+    return render_template("index.html", **context)
+
+
+@app.errorhandler(ConfigError)
+def handle_config_error(err: ConfigError):
+    return render_template("error.html", message=str(err)), 500
+
+
+@app.errorhandler(requests.HTTPError)
+def handle_http_error(err: requests.HTTPError):
+    message = "无法从 Firefly III 获取数据，请检查配置和网络后重试。"
+    return render_template("error.html", message=f"{message}\n{err}"), 502
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
