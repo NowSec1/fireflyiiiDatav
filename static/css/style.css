@@ -27,6 +27,7 @@ body {
   flex-direction: column;
   min-height: 100vh;
   padding: 24px 32px 48px;
+  gap: 16px;
 }
 
 .header {
@@ -73,8 +74,14 @@ body {
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 20px;
-  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.3);
-  backdrop-filter: blur(12px);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.28);
+  contain: layout paint;
+}
+
+@supports (backdrop-filter: blur(10px)) {
+  .card {
+    backdrop-filter: blur(10px);
+  }
 }
 
 .card.highlight h2 {
@@ -111,11 +118,32 @@ body {
   flex-direction: column;
   gap: 16px;
   min-height: 280px;
-  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.3);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.28);
+  contain: layout paint;
+}
+
+@supports (backdrop-filter: blur(12px)) {
+  .panel {
+    backdrop-filter: blur(12px);
+  }
+}
+
+.panel-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  justify-content: space-between;
 }
 
 .panel.large {
   min-height: 420px;
+}
+
+.panel-note {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .panel h3 {
@@ -124,9 +152,43 @@ body {
   color: var(--text-secondary);
 }
 
+.chart-container {
+  position: relative;
+  flex: 1;
+  min-height: 240px;
+  display: flex;
+}
+
+.chart-container--tall {
+  min-height: 360px;
+}
+
 canvas {
   width: 100% !important;
   height: 100% !important;
+}
+
+.chart-container canvas[hidden] {
+  display: none !important;
+}
+
+.empty-state {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  border-radius: 16px;
+}
+
+.empty-state[hidden] {
+  display: none;
 }
 
 .list {
@@ -156,6 +218,21 @@ canvas {
 .list li.empty {
   justify-content: center;
   color: var(--text-secondary);
+}
+
+@media (min-width: 1280px) {
+  .chart-row {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 .error {

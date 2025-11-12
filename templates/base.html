@@ -6,7 +6,7 @@
     <title>Firefly III 数据态势大屏</title>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
   </head>
   <body>
     <div class="page">
@@ -28,5 +28,6 @@
         <span>Powered by Firefly III API</span>
       </footer>
     </div>
+    {% block scripts %}{% endblock %}
   </body>
 </html>

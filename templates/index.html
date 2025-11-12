@@ -22,23 +22,38 @@
 
 <section class="chart-row">
   <article class="panel large">
-    <h3>月度收支趋势</h3>
-    <canvas id="monthlyTrends"></canvas>
+    <div class="panel-header">
+      <h3>月度收支趋势</h3>
+      <span class="panel-note">最近 12 个月</span>
+    </div>
+    <div class="chart-container chart-container--tall">
+      <canvas id="monthlyTrends"></canvas>
+      <p class="empty-state" data-role="empty-state" hidden>暂无数据</p>
+    </div>
   </article>
 </section>
 
 <section class="chart-row">
   <article class="panel">
     <h3>支出类别 TOP 5</h3>
-    <canvas id="spendingCategories"></canvas>
+    <div class="chart-container">
+      <canvas id="spendingCategories"></canvas>
+      <p class="empty-state" data-role="empty-state" hidden>暂无数据</p>
+    </div>
   </article>
   <article class="panel">
     <h3>收入类别 TOP 5</h3>
-    <canvas id="incomeCategories"></canvas>
+    <div class="chart-container">
+      <canvas id="incomeCategories"></canvas>
+      <p class="empty-state" data-role="empty-state" hidden>暂无数据</p>
+    </div>
   </article>
   <article class="panel">
     <h3>主要转入账户</h3>
-    <canvas id="transferAccounts"></canvas>
+    <div class="chart-container">
+      <canvas id="transferAccounts"></canvas>
+      <p class="empty-state" data-role="empty-state" hidden>暂无数据</p>
+    </div>
   </article>
 </section>
 
@@ -65,132 +80,19 @@
   </article>
 </section>
 
-<script>
-  const monthlyLabels = {{ monthly_labels|tojson }};
-  const monthlyWithdrawals = {{ monthly_withdrawals|tojson }};
-  const monthlyDeposits = {{ monthly_deposits|tojson }};
-  const monthlyTransfers = {{ monthly_transfers|tojson }};
+{% endblock %}
 
-  const spendingCategories = {{ top_spending_categories|tojson }};
-  const incomeCategories = {{ top_income_categories|tojson }};
-  const transferAccounts = {{ top_transfer_accounts|tojson }};
-
-  const palette = {
-    withdrawal: '#ff6b6b',
-    deposit: '#4dabf7',
-    transfer: '#f7b84b',
-    neutral: '#ced4da'
-  };
-
-  const trendCtx = document.getElementById('monthlyTrends');
-  new Chart(trendCtx, {
-    type: 'line',
-    data: {
-      labels: monthlyLabels,
-      datasets: [
-        {
-          label: '支出',
-          data: monthlyWithdrawals,
-          borderColor: palette.withdrawal,
-          backgroundColor: 'rgba(255, 107, 107, 0.1)',
-          tension: 0.35,
-          fill: true,
-        },
-        {
-          label: '收入',
-          data: monthlyDeposits,
-          borderColor: palette.deposit,
-          backgroundColor: 'rgba(77, 171, 247, 0.1)',
-          tension: 0.35,
-          fill: true,
-        },
-        {
-          label: '转账',
-          data: monthlyTransfers,
-          borderColor: palette.transfer,
-          backgroundColor: 'rgba(247, 184, 75, 0.1)',
-          tension: 0.35,
-          fill: true,
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { labels: { color: '#f1f3f5' } },
-        tooltip: {
-          callbacks: {
-            label: function(context) {
-              const value = context.parsed.y || 0;
-              return `${context.dataset.label}: ¥${value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          ticks: { color: '#dee2e6' },
-          grid: { color: 'rgba(255, 255, 255, 0.05)' }
-        },
-        y: {
-          ticks: {
-            color: '#dee2e6',
-            callback: value => `¥${value}`
-          },
-          grid: { color: 'rgba(255, 255, 255, 0.08)' }
-        }
-      }
-    }
-  });
-
-  function renderHorizontalBar(canvasId, dataset, color) {
-    const ctx = document.getElementById(canvasId);
-    const labels = dataset.map(item => item[0]);
-    const values = dataset.map(item => item[1]);
-
-    new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [
-          {
-            data: values,
-            backgroundColor: color,
-            borderRadius: 8,
-            barThickness: 24,
-          }
-        ]
-      },
-      options: {
-        indexAxis: 'y',
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            callbacks: {
-              label: context => `¥${context.parsed.x.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-            }
-          }
-        },
-        scales: {
-          x: {
-            ticks: { color: '#dee2e6' },
-            grid: { color: 'rgba(255, 255, 255, 0.05)' }
-          },
-          y: {
-            ticks: { color: '#dee2e6' },
-            grid: { display: false }
-          }
-        }
-      }
-    });
-  }
-
-  renderHorizontalBar('spendingCategories', spendingCategories, palette.withdrawal);
-  renderHorizontalBar('incomeCategories', incomeCategories, palette.deposit);
-  renderHorizontalBar('transferAccounts', transferAccounts, palette.transfer);
-</script>
+{% block scripts %}
+  <script id="dashboard-data" type="application/json">
+    {{ {
+      "monthlyLabels": monthly_labels,
+      "monthlyWithdrawals": monthly_withdrawals,
+      "monthlyDeposits": monthly_deposits,
+      "monthlyTransfers": monthly_transfers,
+      "spendingCategories": top_spending_categories,
+      "incomeCategories": top_income_categories,
+      "transferAccounts": top_transfer_accounts
+    } | tojson }}
+  </script>
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
 {% endblock %}
