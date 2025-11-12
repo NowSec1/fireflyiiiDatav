@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="error">
+  <div class="error-card">
+    <h2>配置或数据错误</h2>
+    <p>{{ message }}</p>
+    <p>请确认 <code>config.yaml</code> 中的地址和令牌配置正确，并确保 Firefly III API 可访问。</p>
+  </div>
+</section>
+{% endblock %}
