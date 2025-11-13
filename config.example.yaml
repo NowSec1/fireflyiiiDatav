@@ -3,3 +3,5 @@ api_base_url: "https://your-firefly-instance"
 api_token: "your_personal_access_token"
 # Optional: number of months to visualize (default: 12)
 months: 12
+# Optional: cache duration in minutes for dashboard data (default: 10)
+cache_ttl_minutes: 10

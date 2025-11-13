@@ -18,13 +18,36 @@
     <h2>转账总额</h2>
     <p class="metric">¥{{ '%.2f'|format(totals.get('transfer', 0)) }}</p>
   </article>
+  <article class="card highlight">
+    <h2>月均支出</h2>
+    <p class="metric negative">¥{{ '%.2f'|format(average_withdrawal) }}</p>
+  </article>
+  <article class="card highlight">
+    <h2>月均收入</h2>
+    <p class="metric positive">¥{{ '%.2f'|format(average_deposit) }}</p>
+  </article>
+  <article class="card highlight">
+    <h2>月均净流入</h2>
+    <p class="metric {{ 'positive' if average_net >= 0 else 'negative' }}">¥{{ '%.2f'|format(average_net) }}</p>
+  </article>
+</section>
+
+<section class="dashboard-meta">
+  <p>数据范围：{{ date_range.start }} 至 {{ date_range.end }}（共 {{ months }} 个月）</p>
+  <p>
+    最后更新：{{ last_updated_display }}
+    <span class="meta-divider">•</span>
+    缓存：{{ cache_ttl_minutes }} 分钟
+    <span class="meta-divider">•</span>
+    <a href="?refresh=1" class="meta-link">立即刷新</a>
+  </p>
 </section>
 
 <section class="chart-row">
   <article class="panel large">
     <div class="panel-header">
       <h3>月度收支趋势</h3>
-      <span class="panel-note">最近 12 个月</span>
+      <span class="panel-note">最近 {{ months }} 个月</span>
     </div>
     <div class="chart-container chart-container--tall">
       <canvas id="monthlyTrends"></canvas>
@@ -89,6 +112,7 @@
       "monthlyWithdrawals": monthly_withdrawals,
       "monthlyDeposits": monthly_deposits,
       "monthlyTransfers": monthly_transfers,
+      "monthlyNet": monthly_net,
       "spendingCategories": top_spending_categories,
       "incomeCategories": top_income_categories,
       "transferAccounts": top_transfer_accounts

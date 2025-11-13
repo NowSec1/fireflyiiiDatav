@@ -69,6 +69,38 @@ body {
   gap: 16px;
 }
 
+.dashboard-meta {
+  margin: 8px 0 28px;
+  color: var(--text-secondary);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 0.95rem;
+}
+
+.dashboard-meta p {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meta-divider {
+  opacity: 0.6;
+}
+
+.meta-link {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.meta-link:hover,
+.meta-link:focus {
+  color: #60a5fa;
+  text-decoration: underline;
+}
+
 .card {
   background: var(--card-bg);
   border: 1px solid var(--border);

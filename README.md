@@ -5,9 +5,10 @@ A Flask-based dashboard that visualizes Firefly III withdrawal, deposit, and tra
 ## Features
 
 - Aggregates Firefly III transactions for the last N months (configurable, default 12)
-- Displays monthly trends for withdrawals, deposits, and transfers
+- Displays monthly trends for withdrawals, deposits, transfers, and net cashflow
 - Highlights top categories and accounts contributing to spending and income
-- Presents overall figures in a large-screen friendly layout
+- Presents overall figures, monthly averages, and recency indicators in a large-screen friendly layout
+- Parallelizes API calls and caches responses to accelerate repeated visits
 
 ## Prerequisites
 
@@ -21,6 +22,7 @@ A Flask-based dashboard that visualizes Firefly III withdrawal, deposit, and tra
    - `api_base_url`: Base URL of your Firefly III instance (e.g., `https://firefly.example.com`).
    - `api_token`: Your Firefly III personal access token.
    - Optionally adjust `months` to control how many months of history are shown.
+   - Optionally adjust `cache_ttl_minutes` to control how long dashboard data stays cached in memory.
 
 ## Installation
 
@@ -40,6 +42,6 @@ Open `http://localhost:5000` in your browser to view the dashboard.
 
 ## Notes
 
-- The application caches nothing; each page load fetches the latest data from Firefly III.
+- Dashboard data is cached in memory for `cache_ttl_minutes` (default 10). Append `?refresh=1` to the URL to force a refresh.
 - Ensure the configured token has sufficient permissions; otherwise API calls will fail.
-- Network latency and the amount of historical data requested can impact load time.
+- Network latency and the amount of historical data requested can impact the first load time, but cached visits reuse prior results.

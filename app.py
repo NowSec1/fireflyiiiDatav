@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from threading import Lock
 from typing import Dict, Iterable, List, Tuple
 
 import requests
 import yaml
 from dateutil import parser
 from dateutil.relativedelta import relativedelta
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 
 
 @dataclass
@@ -19,6 +21,7 @@ class AppConfig:
     api_base_url: str
     api_token: str
     months: int = 12
+    cache_ttl_minutes: int = 10
 
 
 class ConfigError(RuntimeError):
@@ -45,7 +48,16 @@ def load_config() -> AppConfig:
     if months <= 0:
         raise ConfigError("`months` must be a positive integer")
 
-    return AppConfig(api_base_url=api_base_url, api_token=api_token, months=months)
+    cache_ttl = int(raw.get("cache_ttl_minutes", 10))
+    if cache_ttl <= 0:
+        raise ConfigError("`cache_ttl_minutes` must be a positive integer")
+
+    return AppConfig(
+        api_base_url=api_base_url,
+        api_token=api_token,
+        months=months,
+        cache_ttl_minutes=cache_ttl,
+    )
 
 
 class FireflyClient:
@@ -135,13 +147,19 @@ def aggregate_monthly(transactions: Dict[str, List[Dict[str, object]]], months: 
             buckets[key][tx_type] += tx["amount"]
 
     labels: List[str] = []
-    series = {"withdrawal": [], "deposit": [], "transfer": []}
+    series = {"withdrawal": [], "deposit": [], "transfer": [], "net": []}
 
     for month in months:
         key = month.strftime("%Y-%m")
         labels.append(key)
-        for tx_type in series.keys():
-            series[tx_type].append(float(buckets[key].get(tx_type, Decimal("0"))))
+        withdrawal = buckets[key].get("withdrawal", Decimal("0"))
+        deposit = buckets[key].get("deposit", Decimal("0"))
+        transfer = buckets[key].get("transfer", Decimal("0"))
+
+        series["withdrawal"].append(float(withdrawal))
+        series["deposit"].append(float(deposit))
+        series["transfer"].append(float(transfer))
+        series["net"].append(float(deposit - withdrawal))
 
     series["labels"] = labels
     return series
@@ -176,35 +194,82 @@ def prepare_context(config: AppConfig) -> Dict[str, object]:
     client = FireflyClient(config)
     transactions: Dict[str, List[Dict[str, object]]] = {}
 
-    for tx_type in ("withdrawal", "deposit", "transfer"):
-        transactions[tx_type] = client.fetch_transactions(tx_type, start_date, end_date)
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        future_map = {
+            executor.submit(client.fetch_transactions, tx_type, start_date, end_date): tx_type
+            for tx_type in ("withdrawal", "deposit", "transfer")
+        }
+        for future in as_completed(future_map):
+            tx_type = future_map[future]
+            transactions[tx_type] = future.result()
 
     monthly_series = aggregate_monthly(transactions, months)
     totals = aggregate_totals(transactions)
+    month_count = max(len(months), 1)
 
     context = {
         "monthly_labels": monthly_series["labels"],
         "monthly_withdrawals": monthly_series["withdrawal"],
         "monthly_deposits": monthly_series["deposit"],
         "monthly_transfers": monthly_series["transfer"],
+        "monthly_net": monthly_series["net"],
         "totals": totals,
+        "average_withdrawal": totals.get("withdrawal", 0.0) / month_count,
+        "average_deposit": totals.get("deposit", 0.0) / month_count,
+        "average_net": totals.get("net", 0.0) / month_count,
         "top_spending_categories": top_breakdown(transactions["withdrawal"], "category"),
         "top_income_categories": top_breakdown(transactions["deposit"], "category"),
         "top_source_accounts": top_breakdown(transactions["withdrawal"], "source"),
         "top_destination_accounts": top_breakdown(transactions["deposit"], "destination"),
         "top_transfer_accounts": top_breakdown(transactions["transfer"], "destination"),
         "last_updated": datetime.utcnow(),
+        "date_range": {
+            "start": start_date.strftime("%Y-%m-%d"),
+            "end": end_date.strftime("%Y-%m-%d"),
+        },
+        "months": config.months,
     }
     return context
 
 
+@dataclass
+class CacheEntry:
+    value: Dict[str, object]
+    expires_at: datetime
+
+
+class DashboardCache:
+    def __init__(self) -> None:
+        self._entry: CacheEntry | None = None
+        self._lock = Lock()
+
+    def get(self, config: AppConfig, *, force_refresh: bool = False) -> Dict[str, object]:
+        ttl = timedelta(minutes=config.cache_ttl_minutes)
+        now = datetime.utcnow()
+
+        with self._lock:
+            if not force_refresh and self._entry and self._entry.expires_at > now:
+                return self._entry.value
+
+        context = prepare_context(config)
+        expires_at = now + ttl
+        context["cache_ttl_minutes"] = config.cache_ttl_minutes
+        context["last_updated_display"] = context["last_updated"].strftime("%Y-%m-%d %H:%M UTC")
+
+        with self._lock:
+            self._entry = CacheEntry(value=context, expires_at=expires_at)
+        return context
+
+
 app = Flask(__name__)
+dashboard_cache = DashboardCache()
 
 
 @app.route("/")
 def index():
     config = load_config()
-    context = prepare_context(config)
+    force_refresh = request.args.get("refresh") in {"1", "true", "yes"}
+    context = dashboard_cache.get(config, force_refresh=force_refresh)
     return render_template("index.html", **context)
 
 

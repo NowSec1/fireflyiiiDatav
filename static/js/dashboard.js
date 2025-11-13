@@ -17,6 +17,7 @@
     monthlyWithdrawals = [],
     monthlyDeposits = [],
     monthlyTransfers = [],
+    monthlyNet = [],
     spendingCategories = [],
     incomeCategories = [],
     transferAccounts = []
@@ -38,6 +39,7 @@
     withdrawal: '#ff6b6b',
     deposit: '#4dabf7',
     transfer: '#f7b84b',
+    net: '#a78bfa',
     neutral: '#ced4da'
   };
 
@@ -115,7 +117,7 @@
   };
 
   const monthlyCanvas = document.getElementById('monthlyTrends');
-  const hasMonthlyData = [monthlyWithdrawals, monthlyDeposits, monthlyTransfers].some(datasetHasValue);
+  const hasMonthlyData = [monthlyWithdrawals, monthlyDeposits, monthlyTransfers, monthlyNet].some(datasetHasValue);
   if (monthlyCanvas) {
     if (!hasMonthlyData) {
       showEmptyState(monthlyCanvas, '暂无月度趋势数据');
@@ -157,6 +159,18 @@
               pointRadius: 3,
               pointHoverRadius: 5,
               borderWidth: 2
+            },
+            {
+              label: '净流入',
+              data: monthlyNet,
+              borderColor: palette.net,
+              backgroundColor: 'rgba(167, 139, 250, 0.16)',
+              tension: 0.35,
+              fill: false,
+              pointRadius: 0,
+              pointHoverRadius: 5,
+              borderWidth: 2,
+              borderDash: [6, 6]
             }
           ]
         },
