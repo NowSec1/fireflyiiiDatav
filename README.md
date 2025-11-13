@@ -4,7 +4,7 @@ A Flask-based dashboard that visualizes Firefly III withdrawal, deposit, and tra
 
 ## Features
 
-- Aggregates Firefly III transactions for the last N months (configurable, default 12)
+- Aggregates Firefly III transactions for the current natural year by default, with optional custom periods
 - Displays monthly trends for withdrawals, deposits, transfers, and net cashflow
 - Highlights top categories and accounts contributing to spending and income
 - Presents overall figures, monthly averages, and recency indicators in a large-screen friendly layout
@@ -21,8 +21,16 @@ A Flask-based dashboard that visualizes Firefly III withdrawal, deposit, and tra
 2. Edit `config.yaml` and set:
    - `api_base_url`: Base URL of your Firefly III instance (e.g., `https://firefly.example.com`).
    - `api_token`: Your Firefly III personal access token.
-   - Optionally adjust `months` to control how many months of history are shown.
    - Optionally adjust `cache_ttl_minutes` to control how long dashboard data stays cached in memory.
+   - Optionally configure the reporting window:
+     - Set `months` to use a rolling N-month view ending in the configured end month (defaults to the current month).
+     - Or add a `period` block with ISO dates to fix the range, e.g.:
+
+       ```yaml
+       period:
+         start: "2023-01-01"
+         end: "2023-12-31"
+       ```
 
 ## Installation
 

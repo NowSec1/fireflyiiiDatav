@@ -20,8 +20,10 @@ from flask import Flask, render_template, request
 class AppConfig:
     api_base_url: str
     api_token: str
-    months: int = 12
     cache_ttl_minutes: int = 10
+    months: int | None = None
+    period_start: date | None = None
+    period_end: date | None = None
 
 
 class ConfigError(RuntimeError):
@@ -44,9 +46,47 @@ def load_config() -> AppConfig:
     except KeyError as exc:  # pragma: no cover - defensive guard
         raise ConfigError(f"Configuration is missing required key: {exc.args[0]}") from exc
 
-    months = int(raw.get("months", 12))
-    if months <= 0:
-        raise ConfigError("`months` must be a positive integer")
+    months_raw = raw.get("months")
+    months: int | None = None
+    if months_raw is not None:
+        months = int(months_raw)
+        if months <= 0:
+            raise ConfigError("`months` must be a positive integer")
+
+    period_config_raw = raw.get("period", {}) or {}
+    if not isinstance(period_config_raw, dict):
+        raise ConfigError("`period` must be a mapping with `start`/`end` keys")
+    period_config = period_config_raw
+    period_start_value = period_config.get("start")
+    period_end_value = period_config.get("end")
+
+    period_start: date | None = None
+    period_end: date | None = None
+
+    if period_start_value:
+        try:
+            period_start = date.fromisoformat(str(period_start_value))
+        except ValueError as exc:
+            raise ConfigError("`period.start` must be in YYYY-MM-DD format") from exc
+
+    if period_end_value:
+        try:
+            period_end = date.fromisoformat(str(period_end_value))
+        except ValueError as exc:
+            raise ConfigError("`period.end` must be in YYYY-MM-DD format") from exc
+
+    today = date.today()
+    if period_end is None:
+        period_end = today
+
+    reference_date = period_end
+    if period_start is None and months is not None:
+        period_start = month_start(reference_date) - relativedelta(months=months - 1)
+    elif period_start is None:
+        period_start = date(reference_date.year, 1, 1)
+
+    if period_end < period_start:
+        raise ConfigError("`period.end` must not be earlier than the start date")
 
     cache_ttl = int(raw.get("cache_ttl_minutes", 10))
     if cache_ttl <= 0:
@@ -55,8 +95,10 @@ def load_config() -> AppConfig:
     return AppConfig(
         api_base_url=api_base_url,
         api_token=api_token,
-        months=months,
         cache_ttl_minutes=cache_ttl,
+        months=months,
+        period_start=period_start,
+        period_end=period_end,
     )
 
 
@@ -133,8 +175,14 @@ def month_start(value: date) -> date:
     return value.replace(day=1)
 
 
-def month_range(start: date, months: int) -> List[date]:
-    return [month_start(start) + relativedelta(months=i) for i in range(months)]
+def month_sequence(start: date, end: date) -> List[date]:
+    months: List[date] = []
+    current = month_start(start)
+    end_month = month_start(end)
+    while current <= end_month:
+        months.append(current)
+        current = month_start(current + relativedelta(months=1))
+    return months
 
 
 def aggregate_monthly(transactions: Dict[str, List[Dict[str, object]]], months: List[date]) -> Dict[str, List[float]]:
@@ -185,11 +233,11 @@ def top_breakdown(items: List[Dict[str, object]], key: str, limit: int = 5) -> L
 
 
 def prepare_context(config: AppConfig) -> Dict[str, object]:
-    today = date.today()
-    start_month = month_start(today) - relativedelta(months=config.months - 1)
-    months = month_range(start_month, config.months)
-    start_date = months[0]
-    end_date = today
+    start_date = config.period_start or date(date.today().year, 1, 1)
+    end_date = config.period_end or date.today()
+    months = month_sequence(start_date, end_date)
+    if not months:
+        months = [month_start(start_date)]
 
     client = FireflyClient(config)
     transactions: Dict[str, List[Dict[str, object]]] = {}
@@ -227,7 +275,7 @@ def prepare_context(config: AppConfig) -> Dict[str, object]:
             "start": start_date.strftime("%Y-%m-%d"),
             "end": end_date.strftime("%Y-%m-%d"),
         },
-        "months": config.months,
+        "months": len(months),
     }
     return context
 
