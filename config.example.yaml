@@ -1,0 +1,11 @@
+# Copy this file to config.yaml and fill in your Firefly III credentials.
+api_base_url: "https://your-firefly-instance"
+api_token: "your_personal_access_token"
+# Optional: cache duration in minutes for dashboard data (default: 10)
+cache_ttl_minutes: 10
+# Optional: uncomment to use a rolling N-month window ending this month
+# months: 6
+# Optional: uncomment to pin the reporting period to specific dates
+# period:
+#   start: "2023-01-01"
+#   end: "2023-12-31"

@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="cards">
+  <article class="card highlight">
+    <h2>总支出</h2>
+    <p class="metric negative">¥{{ '%.2f'|format(totals.get('withdrawal', 0)) }}</p>
+  </article>
+  <article class="card highlight">
+    <h2>总收入</h2>
+    <p class="metric positive">¥{{ '%.2f'|format(totals.get('deposit', 0)) }}</p>
+  </article>
+  <article class="card highlight">
+    <h2>净流入</h2>
+    <p class="metric {{ 'positive' if totals.get('net', 0) >= 0 else 'negative' }}">¥{{ '%.2f'|format(totals.get('net', 0)) }}</p>
+  </article>
+  <article class="card highlight">
+    <h2>转账总额</h2>
+    <p class="metric">¥{{ '%.2f'|format(totals.get('transfer', 0)) }}</p>
+  </article>
+  <article class="card highlight">
+    <h2>月均支出</h2>
+    <p class="metric negative">¥{{ '%.2f'|format(average_withdrawal) }}</p>
+  </article>
+  <article class="card highlight">
+    <h2>月均收入</h2>
+    <p class="metric positive">¥{{ '%.2f'|format(average_deposit) }}</p>
+  </article>
+  <article class="card highlight">
+    <h2>月均净流入</h2>
+    <p class="metric {{ 'positive' if average_net >= 0 else 'negative' }}">¥{{ '%.2f'|format(average_net) }}</p>
+  </article>
+</section>
+
+<section class="dashboard-meta">
+  <p>数据范围：{{ date_range.start }} 至 {{ date_range.end }}（共 {{ months }} 个月）</p>
+  <p>
+    最后更新：{{ last_updated_display }}
+    <span class="meta-divider">•</span>
+    缓存：{{ cache_ttl_minutes }} 分钟
+    <span class="meta-divider">•</span>
+    <a href="?refresh=1" class="meta-link">立即刷新</a>
+  </p>
+</section>
+
+<section class="chart-row">
+  <article class="panel large">
+    <div class="panel-header">
+      <h3>月度收支趋势</h3>
+      <span class="panel-note">期间内共 {{ months }} 个月</span>
+    </div>
+    <div class="chart-container chart-container--tall">
+      <canvas id="monthlyTrends"></canvas>
+      <p class="empty-state" data-role="empty-state" hidden>暂无数据</p>
+    </div>
+  </article>
+</section>
+
+<section class="chart-row">
+  <article class="panel">
+    <h3>支出类别 TOP 5</h3>
+    <div class="chart-container">
+      <canvas id="spendingCategories"></canvas>
+      <p class="empty-state" data-role="empty-state" hidden>暂无数据</p>
+    </div>
+  </article>
+  <article class="panel">
+    <h3>收入类别 TOP 5</h3>
+    <div class="chart-container">
+      <canvas id="incomeCategories"></canvas>
+      <p class="empty-state" data-role="empty-state" hidden>暂无数据</p>
+    </div>
+  </article>
+  <article class="panel">
+    <h3>主要转入账户</h3>
+    <div class="chart-container">
+      <canvas id="transferAccounts"></canvas>
+      <p class="empty-state" data-role="empty-state" hidden>暂无数据</p>
+    </div>
+  </article>
+</section>
+
+<section class="chart-row">
+  <article class="panel">
+    <h3>支出来源账户 TOP 5</h3>
+    <ul class="list">
+      {% for name, amount in top_source_accounts %}
+      <li><span>{{ name }}</span><span>¥{{ '%.2f'|format(amount) }}</span></li>
+      {% else %}
+      <li class="empty">暂无数据</li>
+      {% endfor %}
+    </ul>
+  </article>
+  <article class="panel">
+    <h3>收入目标账户 TOP 5</h3>
+    <ul class="list">
+      {% for name, amount in top_destination_accounts %}
+      <li><span>{{ name }}</span><span>¥{{ '%.2f'|format(amount) }}</span></li>
+      {% else %}
+      <li class="empty">暂无数据</li>
+      {% endfor %}
+    </ul>
+  </article>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+  <script id="dashboard-data" type="application/json">
+    {{ {
+      "monthlyLabels": monthly_labels,
+      "monthlyWithdrawals": monthly_withdrawals,
+      "monthlyDeposits": monthly_deposits,
+      "monthlyTransfers": monthly_transfers,
+      "monthlyNet": monthly_net,
+      "spendingCategories": top_spending_categories,
+      "incomeCategories": top_income_categories,
+      "transferAccounts": top_transfer_accounts
+    } | tojson }}
+  </script>
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
+{% endblock %}
